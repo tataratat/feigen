@@ -1,0 +1,51 @@
+[build-system]
+requires = ['setuptools']
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = 'feigen'
+description = 'python interactive front-end for iganet.'
+authors = [
+    {name = 'Jaewook Lee', email = 'jaewooklee042@gmail.com'},
+    {name = 'Matthias Möller', email = 'mmoelle1@gmail.com'},
+]
+readme = 'README.md'
+requires-python = '>=3.6'
+keywords = ['iganet', 'interactive']
+license = {text = 'MPL 2.0'}
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    'Intended Audience :: Science/Research',
+    'Topic :: Scientific/Engineering :: Information Analysis',
+    "License :: OSI Approved :: Mozilla Public License 2.0 (MPL 2.0)",
+    'Operating System :: Microsoft :: Windows',
+    'Operating System :: POSIX',
+    'Operating System :: MacOS',
+    'Programming Language :: Python :: 3.7',
+    'Programming Language :: Python :: 3.8',
+    'Programming Language :: Python :: 3.9',
+    'Programming Language :: Python :: 3.10',
+    'Programming Language :: Python :: 3.11',
+]
+dependencies = [
+    'vedo',
+    'numpy',
+    'splinepy[all]',
+    'websockets',
+]
+dynamic = ['version']
+
+[tool.setuptools.dynamic]
+version = {attr = 'feigen._version.__version__'}
+
+[tool.ruff]
+select = [
+  "E", "F", "W", # flake8
+  "B",           # flake8-bugbear
+  "ARG",         # flake8-unused-arguments
+  "C4",          # flake8-comprehensions
+  "PL",          # pylint
+  "SIM",         # flake8-simplify
+  "T20",         # flake8-print
+  "NPY",         # numpy specific rules
+]
