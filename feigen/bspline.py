@@ -78,7 +78,7 @@ def _process_boundary_actors(plt):
         bids = list(range(len(plt._state["boundary_splines"])))
 
     else:
-        bids.append[bid]
+        bids.append(bid)
 
     # process boundaries. cps as well, if needed
     boundary_splines = plt._state["boundary_splines"]
@@ -105,6 +105,7 @@ def _process_boundary_actors(plt):
             for i, cp in enumerate(b_spl.cps):
                 sph = vedo.Sphere(cp, r=0.05, res=5)
                 sph.cp_id = i
+                sph.boundary_id = b
                 new_cps.append(sph)
             plt._state["boundary_cp_actors"][b] = new_cps
             continue
@@ -261,7 +262,7 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         self._state["boundary_actors"] = [None] * len(para_boundaries)
         self._state["boundary_cp_actors"] = [None] * len(para_boundaries)
 
-        # create parametric_view
+        # create parametric_view - this does not consider embedded geometry
         self._state["parametric_view"] = self._state[
             "spline"
         ].create.parametric_view(axes=True, conform=False)
@@ -380,6 +381,7 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         # boundary condition update
         elif evt.at == self._config["bc_plot"]:
             bid = self._state["picked_boundary_id"]
+            boundary_spline = self._state["boundary_splines"][bid]
 
             # first remove
             self.remove(
@@ -393,13 +395,15 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             # depends on the field dim, we will have to restrict
             # movement
             if self._config["field_dim"] == 1:  # noqa PLR2004
-                ind = bid
+                ind = int(bid / self._state["spline"].para_dim)
             elif self._config["field_dim"] == 2:  # noqa PLR2004
                 ind = slice(None, None, None)
             else:
                 raise ValueError("This interactor supports field_dim < 3.")
 
-            coord = self.compute_world_coordinate(evt.picked2d, at=evt.at)[ind]
+            coord = self.compute_world_coordinate(evt.picked2d, at=evt.at)[
+                : boundary_spline.dim
+            ][ind]
             self._state["boundary_splines"][bid].cps[cp_id, ind] = coord
 
             # process and add
