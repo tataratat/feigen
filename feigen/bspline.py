@@ -7,6 +7,7 @@ from feigen._base import FeigenBase
 
 # skip bound checks
 splinepy.settings.CHECK_BOUNDS = False
+splinepy.settings.NTHREADS = 2
 
 
 def _process_spline_actors(plt):
@@ -82,6 +83,7 @@ def _process_boundary_actors(plt):
 
     # process boundaries. cps as well, if needed
     boundary_splines = plt._state["boundary_splines"]
+    bc_areas = plt._state["boundary_spline_areas"]
     cp_id = plt._state["picked_cp_id"]
     for b in bids:
         b_spl = boundary_splines[b]
@@ -95,8 +97,22 @@ def _process_boundary_actors(plt):
         for a in actors.values():
             a.pickable(False)
 
+        bc_area = bc_areas[b]
+        cp_half = int(len(bc_area.cps) / 2)
+        bc_area.cps[:cp_half] = b_spl.cps
+        if bc_area.dim == 2:  # noqa PLR2004
+            actor = bc_area.extract.faces(
+                plt._config["sample_resolutions"]
+            ).showable()
+        elif bc_area.dim == 3:  # noqa PLR2004
+            actor = bc_area.extract.volumes(
+                plt._config["sample_resolutions"]
+            ).showable()
+        actor.c("pink").lighting("off").pickable(False)
+
         # now add
         plt._state["boundary_actors"][b] = actors
+        plt._state["boundary_area_actors"][b] = actor
 
         # process cps
         # nothing selected -> update all
@@ -115,6 +131,22 @@ def _process_boundary_actors(plt):
         sph.cp_id = cp_id
         sph.boundary_id = b
         plt._state["boundary_cp_actors"][b][cp_id] = sph
+
+
+def _process_parametric_view(plt):
+    """ """
+    p_view = plt._state["parametric_view"]
+    show_o = p_view.show_options
+    show_o["alpha"] = 0.2
+    show_o["c"] = "yellow"
+    show_o["lighting"] = "off"
+    actors = p_view.showable(as_dict=True)
+    for a in actors.values():
+        a.pickable(False)
+        if isinstance(a, vedo.Assembly):
+            for obj in a.recursive_unpack():
+                obj.pickable(False)
+    plt._state["parametric_view_actors"] = actors
 
 
 class BSpline2D(vedo.Plotter, FeigenBase):
@@ -136,7 +168,7 @@ class BSpline2D(vedo.Plotter, FeigenBase):
 
     __slots__ = ("_config", "_state")
 
-    def __init__(self, uri, degree=None, ncoeffs=None):
+    def __init__(self, uri, degree=None, ncoeffs=None):  # noqa PLR0915
         """
         Create spline and setup callbacks
         """
@@ -201,17 +233,17 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         self.add_callback("LeftButtonRelease", self._left_release)
 
         # add a sync button
-        # self.at(self._config["server_plot"]).add_button(
-        #    self._iganet_sync,
-        #    pos=(0.7, 0.05),  # x, y fraction from bottom left corner
-        #    states=["sync"],  # only one state
-        #    c=["w"],  # TODO - probably just need one
-        #    bc=["dg"],  # TODO  - probably just need one
-        #    font="courier",  # arial, courier, times
-        #    size=25,
-        #    bold=True,
-        #    italic=False,
-        # )
+        self.at(self._config["server_plot"]).add_button(
+            self._iganet_sync,
+            pos=(0.7, 0.05),  # x, y fraction from bottom left corner
+            states=["sync"],  # only one state
+            c=["w", "t"],  # TODO - probably just need one
+            bc=["dg", "b"],  # TODO  - probably just need one
+            font="courier",  # arial, courier, times
+            size=25,
+            bold=True,
+            italic=False,
+        )
 
         # now, connect to websockets
         self._config["iganet_ws"] = comm.WebSocketClient(uri)
@@ -259,8 +291,12 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             pb_high.cps[:] += offset
 
         self._state["boundary_splines"] = para_boundaries
+        self._state["boundary_spline_areas"] = [
+            pb.create.extruded([0] * pb.dim) for pb in para_boundaries
+        ]
         self._state["boundary_actors"] = [None] * len(para_boundaries)
         self._state["boundary_cp_actors"] = [None] * len(para_boundaries)
+        self._state["boundary_area_actors"] = [None] * len(para_boundaries)
 
         # create parametric_view - this does not consider embedded geometry
         self._state["parametric_view"] = self._state[
@@ -309,6 +345,8 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         self._state["picked_boundary_id"] = getattr(
             evt.actor, "boundary_id", -1
         )
+        # save picked at
+        self._state["picked_at"] = evt.at
 
         # once clicked, this means server's previous response is useless
         server_actors = self._state.get("server_plot_actors", None)
@@ -356,7 +394,10 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             return None
 
         # geometry update
-        if evt.at == self._config["geometry_plot"]:
+        if (
+            evt.at == self._config["geometry_plot"]
+            and self._state["picked_at"] == evt.at
+        ):
             # remove existing actors
             self.remove(*self._state["spline_actors"].values(), at=evt.at)
             self.remove(
@@ -379,7 +420,10 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             self.add(self._state["spline_cp_actors"][cp_id], at=evt.at)
 
         # boundary condition update
-        elif evt.at == self._config["bc_plot"]:
+        elif (
+            evt.at == self._config["bc_plot"]
+            and self._state["picked_at"] == evt.at
+        ):
             bid = self._state["picked_boundary_id"]
             boundary_spline = self._state["boundary_splines"][bid]
 
@@ -390,6 +434,7 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             self.remove(
                 self._state["boundary_cp_actors"][bid][cp_id], at=evt.at
             )
+            self.remove(self._state["boundary_area_actors"][bid], at=evt.at)
 
             # compute physical coordinate of the mouse
             # depends on the field dim, we will have to restrict
@@ -410,12 +455,13 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             _process_boundary_actors(self)
 
             self.add(*self._state["boundary_actors"][bid].values(), at=evt.at)
+            self.add(self._state["boundary_area_actors"][bid], at=evt.at)
             self.add(self._state["boundary_cp_actors"][bid][cp_id], at=evt.at)
 
         # render!
         self.render()
 
-    def _iganet_sync(self):
+    def _iganet_sync(self, evt):
         pass
 
     def start(self):
@@ -430,9 +476,11 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         # process for the first time
         _process_spline_actors(self)
         _process_boundary_actors(self)
+        _process_parametric_view(self)
 
         # show everything
         self.show(
+            "Geometry",
             *self._state["spline_actors"].values(),
             *self._state["spline_cp_actors"],
             at=self._config["geometry_plot"],
@@ -450,8 +498,21 @@ class BSpline2D(vedo.Plotter, FeigenBase):
                 mode=self._config["plotter_mode"],
             )
 
+        self.show(
+            "Boundary condition in parametric view",
+            *self._state["parametric_view_actors"].values(),
+            at=self._config["bc_plot"],
+            interactive=False,
+            mode=self._config["plotter_mode"],
+        )
+
         # let's start
-        self.show(interactive=True)
+        self.show(
+            "IgaNet server",
+            at=self._config["server_plot"],
+            interactive=True,
+            mode=self._config["plotter_mode"],
+        )
 
         # TODO - close websocket here?
         self._config["iganet_ws"].websocket.close()
