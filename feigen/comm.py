@@ -75,6 +75,8 @@ def has_same_id(request_form, response_form, raise_=True, message=None):
     # warning log
     log.warning(msg)
 
+    return False
+
 
 def error_check(response_form):
     """
@@ -127,6 +129,38 @@ def iganet_to_splinepy(data_dict):
     for_splinepy["knot_vectors"] = iganet_spline["knots"]
 
     return for_splinepy
+
+
+def recv_until_id_matches(request_form, message, max_recv=10):
+    """
+    Returns a function that calls recv until id matches.
+    This is useful in case there are broadcasts
+    in between your communication.
+
+    Parameters
+    ----------
+    request_form: dict
+    max_recv: int
+      Number of maximum recv call
+
+    Returns
+    -------
+    func: function
+      f(recv) -> eval(response)
+    """
+
+    def func(recv):
+        for _ in range(max_recv):
+            response = eval(recv())
+            if has_same_id(
+                request_form,
+                response,
+                False,
+                "/".join(["recv_until_id_matches()", message]),
+            ):
+                return response
+
+    return func
 
 
 class RequestForm(FeigenBase):
@@ -239,12 +273,80 @@ class RequestForm(FeigenBase):
         # currently only configured for bspline, but
         # here could be a place for a switch among model types
         server_spline = self._ws.send_recv(to_str(req), eval_=True)
+        has_same_id(req, server_spline, raise_=True, message="model_info()")
+        error_check(server_spline)
 
         if to_splinepy_dict:
             return iganet_to_splinepy(server_spline)
 
         # else
         return server_spline
+
+    def sync_coeffs(self, model_id, coeffs):
+        """
+        Syncs iganet model using sync_from.
+        Server response from this request includes some broadcasting
+
+        Parameters
+        ----------
+        model_id: int
+        coeffs: iterable
+
+        Returns
+        -------
+        response: dict
+        """
+        req = self.template()
+
+        # get all coeffs
+        req["request"] = f"put/{self._session_id}/{model_id}/coeffs"
+        req["data"] = {
+            "indices": list(range(len(coeffs))),
+            "coeffs": coeffs.tolist(),
+        }
+
+        synced = self._ws.send_recv(
+            to_str(req),
+            eval_=True,
+            recv_hook=recv_until_id_matches(req, "sync_coeffs()"),
+        )
+
+        has_same_id(req, synced, raise_=True, message="sync_coeffs()")
+        error_check(synced)
+
+        return synced
+
+    def evaluate_model(self, model_id, component, resolution):
+        """
+        Evaluates model.
+
+        Parameters
+        ----------
+        model_id: int
+        component: str
+          For example {"ValueFieldMagnitude", "ValueField", ...}
+        resolution: list
+          probably a good idea to enforce_len before
+
+        Returns
+        -------
+        evaluated: list
+          list of evaluated points
+        """
+        req = self.template()
+
+        req["request"] = f"eval/{self._session_id}/{model_id}/{component}"
+        req["data"] = {"resolution": resolution}
+
+        evaluated = self._ws.send_recv(
+            to_str(req),
+            eval_=True,
+            recv_hook=recv_until_id_matches(req, "evaluate_model()"),
+        )
+        has_same_id(req, evaluated, raise_=True, message="evaluate_model()")
+        error_check(evaluated)
+
+        return evaluated["data"]
 
 
 class WebSocketClient(FeigenBase):

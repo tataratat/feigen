@@ -1,6 +1,7 @@
 import numpy as np
 import splinepy
 import vedo
+from gustaf.utils.arr import enforce_len
 
 from feigen import comm
 from feigen._base import FeigenBase
@@ -8,6 +9,14 @@ from feigen._base import FeigenBase
 # skip bound checks
 splinepy.settings.CHECK_BOUNDS = False
 splinepy.settings.NTHREADS = 2
+
+_CONF = {
+    "sphere_option": {
+        "res": 8,
+        "r": 0.04,
+        "c": "red",
+    }
+}
 
 
 def _process_spline_actors(plt):
@@ -44,14 +53,16 @@ def _process_spline_actors(plt):
     new_cps = []
     if cp_id < 0:
         for i, cp in enumerate(plt._state["spline"].cps):
-            sph = vedo.Sphere(cp, r=0.05, res=5)
+            sph = vedo.Sphere(cp, **_CONF["sphere_option"])
             sph.cp_id = i
             new_cps.append(sph)
         plt._state["spline_cp_actors"] = new_cps
         return None
 
     # now for specific cp
-    sph = vedo.Sphere(plt._state["spline"].cps[cp_id], r=0.05, res=5)
+    sph = vedo.Sphere(
+        plt._state["spline"].cps[cp_id], **_CONF["sphere_option"]
+    )
     sph.cp_id = cp_id
     plt._state["spline_cp_actors"][cp_id] = sph
 
@@ -108,7 +119,7 @@ def _process_boundary_actors(plt):
             actor = bc_area.extract.volumes(
                 plt._config["sample_resolutions"]
             ).showable()
-        actor.c("pink").lighting("off").pickable(False)
+        actor.c("pink").lighting("off").alpha(0.8).pickable(False)
 
         # now add
         plt._state["boundary_actors"][b] = actors
@@ -119,7 +130,7 @@ def _process_boundary_actors(plt):
         if cp_id < 0:
             new_cps = []
             for i, cp in enumerate(b_spl.cps):
-                sph = vedo.Sphere(cp, r=0.05, res=5)
+                sph = vedo.Sphere(cp, **_CONF["sphere_option"])
                 sph.cp_id = i
                 sph.boundary_id = b
                 new_cps.append(sph)
@@ -127,7 +138,7 @@ def _process_boundary_actors(plt):
             continue
 
         # now for specific cp
-        sph = vedo.Sphere(b_spl.cps[cp_id], r=0.05, res=5)
+        sph = vedo.Sphere(b_spl.cps[cp_id], **_CONF["sphere_option"])
         sph.cp_id = cp_id
         sph.boundary_id = b
         plt._state["boundary_cp_actors"][b][cp_id] = sph
@@ -232,18 +243,20 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         self.add_callback("LeftButtonPress", self._left_click)
         self.add_callback("LeftButtonRelease", self._left_release)
 
+        self.add_callback("RightButtonPress", self._iganet_sync)
+
         # add a sync button
-        self.at(self._config["server_plot"]).add_button(
-            self._iganet_sync,
-            pos=(0.7, 0.05),  # x, y fraction from bottom left corner
-            states=["sync"],  # only one state
-            c=["w", "t"],  # TODO - probably just need one
-            bc=["dg", "b"],  # TODO  - probably just need one
-            font="courier",  # arial, courier, times
-            size=25,
-            bold=True,
-            italic=False,
-        )
+        # self.at(self._config["server_plot"]).add_button(
+        #    self._iganet_sync,
+        #    pos=(0.7, 0.05),  # x, y fraction from bottom left corner
+        #    states=["sync"],  # only one state
+        #    c=["w", "t"],  # TODO - probably just need one
+        #    bc=["dg", "b"],  # TODO  - probably just need one
+        #    font="courier",  # arial, courier, times
+        #    size=25,
+        #    bold=True,
+        #    italic=False,
+        # )
 
         # now, connect to websockets
         self._config["iganet_ws"] = comm.WebSocketClient(uri)
@@ -461,8 +474,78 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         # render!
         self.render()
 
-    def _iganet_sync(self, evt):
-        pass
+    def _iganet_sync(self, evt):  # noqa ARG002
+        """
+        Syncs iganet on right click.
+
+        Parameters
+        ----------
+        evt: vedo.Event
+
+        Returns
+        -------
+        None
+        """
+        # remove
+        server_actors = self._state.get("server_plot_actors", None)
+        if server_actors is not None:
+            self.remove(
+                *server_actors.values(), at=self._config["server_plot"]
+            )
+
+        # sync current coordinates
+        self._config["form"].sync_coeffs(
+            self._config["spline_id"], self._state["spline"].cps
+        )
+
+        # sync boundary condition
+        # here
+
+        # eval field - currently, th
+        field = self._config["form"].evaluate_model(
+            self._config["spline_id"],
+            "ValueFieldMagnitude",
+            enforce_len(
+                self._config["sample_resolutions"],
+                self._state["spline"].para_dim,
+            ).tolist(),
+        )  # this is ravel
+
+        # update vedo object
+        # we should copy the geometry (spline),
+        # because we don't want two plots to have same color
+        geo_actor = self._state["spline_actors"]["spline"].clone()
+        geo_actor.cmap("plasma", field).alpha(0.9)
+        self._state["server_plot_actors"] = {
+            "spline": geo_actor,
+            "knots": self._state["spline_actors"]["knots"],
+        }
+        self.add(
+            *self._state["server_plot_actors"].values(),
+            at=self._config["server_plot"],
+        )
+
+        # eval current geometry
+        geo_eval = self._config["form"].evaluate_model(
+            self._config["spline_id"],
+            "ValueField",
+            enforce_len(
+                int(self._config["sample_resolutions"] / 5),
+                self._state["spline"].para_dim,
+            ).tolist(),
+        )
+        eval_points = vedo.Points(geo_eval, c="white")
+        eval_point_ids = eval_points.labels("id", on="points", font="VTK")
+        self._state["server_plot_actors"]["evaluated_points"] = eval_points
+        self._state["server_plot_actors"][
+            "evaluated_point_ids"
+        ] = eval_point_ids.c("grey")
+
+        # for some reason add won't work here
+        self.show(
+            *self._state["server_plot_actors"].values(),
+            at=self._config["server_plot"],
+        )
 
     def start(self):
         """
@@ -506,13 +589,15 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             mode=self._config["plotter_mode"],
         )
 
-        # let's start
         self.show(
-            "IgaNet server",
+            "IgaNet server - right click to sync",
             at=self._config["server_plot"],
-            interactive=True,
+            interactive=False,
             mode=self._config["plotter_mode"],
         )
+
+        # let's start
+        self.interactive()
 
         # TODO - close websocket here?
         self._config["iganet_ws"].websocket.close()
