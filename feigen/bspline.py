@@ -19,6 +19,107 @@ _CONF = {
 }
 
 
+class _BoundaryConnection:
+    """
+    Helper class to transform coupled boundary points with 2 steps:
+    1. Get coupled boundary id and control point id thereof
+    2. Compute relative movement
+
+    Parameters
+    ----------
+    boundary_splines: list
+
+    """
+
+    __slots__ = (
+        "splines",
+        "end_ids",
+        "front_connection",
+        "end_connection",
+        "connection",
+        "direction_factors",
+        "corners",
+    )
+
+    def __init__(self, boundary_splines=None):
+        if boundary_splines is not None:
+            self.setup(boundary_splines)
+
+    def setup(self, boundary_splines):
+        # this is for 2D splines so we can hard code this
+        self.splines = boundary_splines
+
+        # get id of connected boundary
+        # (begin, end)
+        self.connection = (
+            (2, 3),
+            (2, 3),
+            (0, 1),
+            (0, 1),
+        )
+
+        # id of end cps, they repeat.
+        self.end_ids = (
+            int(len(boundary_splines[0].cps) - 1),
+            int(len(boundary_splines[0].cps) - 1),
+            int(len(boundary_splines[1].cps) - 1),
+            int(len(boundary_splines[1].cps) - 1),
+        )
+
+        # this is a bit verbose and can be also done with mod but
+        # this way, we can do a direct look up
+        # plug in from_bid
+        self.front_connection = (0, self.end_ids[2], 0, self.end_ids[0])
+        self.end_connection = (0, self.end_ids[3], 0, self.end_ids[1])
+
+        # some coupled boundaries flip directions to visualize
+        # positive magnitudes. these are factors one can multiply to
+        # change directions per axis
+        # swapping axis is done separately with fixed permutation [1, 0, 2]
+        self.direction_factors = (
+            (np.array([1, 1]), np.array([-1, 1])),
+            (np.array([-1, 1]), np.array([1, 1])),
+            (np.array([1, 1]), np.array([1, -1])),
+            (np.array([1, -1]), np.array([1, 1])),
+        )
+
+        # initial corners - used to compute differences
+        # again, (begin, end)
+        self.corners = (
+            (self.splines[0].cps[0].copy(), self.splines[0].cps[-1].copy()),
+            (self.splines[1].cps[0].copy(), self.splines[1].cps[-1].copy()),
+            (self.splines[2].cps[0].copy(), self.splines[2].cps[-1].copy()),
+            (self.splines[3].cps[0].copy(), self.splines[3].cps[-1].copy()),
+        )
+
+    def transform_ids(self, bid, cp_id):
+        if cp_id == 0:
+            return self.connection[bid][0], self.front_connection[bid]
+
+        if cp_id == self.end_ids[bid]:
+            return self.connection[bid][1], self.end_connection[bid]
+
+        return None, None
+
+    def transform_position(  # noqa PLR0913
+        self, to_bid, to_cp_id, from_bid, from_cp_id, from_position
+    ):
+        """
+        This call assumes that from_cp_id is at either end of the boundary
+        spline.
+        """
+        # get lookup id
+        which_end = 1 if from_cp_id != 0 else 0
+        to_which_end = 1 if to_cp_id != 0 else 0
+
+        # compute the difference - this flips axis and apply correct direction
+        difference = (from_position - self.corners[from_bid][which_end])[
+            [1, 0]
+        ] * self.direction_factors[to_bid][to_which_end]
+
+        return self.corners[to_bid][to_which_end] + difference
+
+
 def _process_spline_actors(plt):
     """
     Helper function to convert current splines to showables
@@ -59,12 +160,9 @@ def _process_spline_actors(plt):
         plt._state["spline_cp_actors"] = new_cps
         return None
 
-    # now for specific cp
-    sph = vedo.Sphere(
-        plt._state["spline"].cps[cp_id], **_CONF["sphere_option"]
+    plt._state["spline_cp_actors"][cp_id].SetPosition(
+        plt._state["spline"].cps[cp_id]
     )
-    sph.cp_id = cp_id
-    plt._state["spline_cp_actors"][cp_id] = sph
 
 
 def _process_boundary_actors(plt):
@@ -88,6 +186,10 @@ def _process_boundary_actors(plt):
     if bid < 0:
         # nothing set. process all
         bids = list(range(len(plt._state["boundary_splines"])))
+        # and also create boundary linkage
+        plt._state["boundary_connection"] = _BoundaryConnection(
+            plt._state["boundary_splines"]
+        )
 
     else:
         bids.append(bid)
@@ -138,10 +240,9 @@ def _process_boundary_actors(plt):
             continue
 
         # now for specific cp
-        sph = vedo.Sphere(b_spl.cps[cp_id], **_CONF["sphere_option"])
-        sph.cp_id = cp_id
-        sph.boundary_id = b
-        plt._state["boundary_cp_actors"][b][cp_id] = sph
+        plt._state["boundary_cp_actors"][b][cp_id].SetPosition(
+            np.append(b_spl.cps[cp_id], [0])
+        )
 
 
 def _process_parametric_view(plt):
@@ -242,21 +343,7 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         self.add_callback("Interaction", self._update)
         self.add_callback("LeftButtonPress", self._left_click)
         self.add_callback("LeftButtonRelease", self._left_release)
-
         self.add_callback("RightButtonPress", self._iganet_sync)
-
-        # add a sync button
-        # self.at(self._config["server_plot"]).add_button(
-        #    self._iganet_sync,
-        #    pos=(0.7, 0.05),  # x, y fraction from bottom left corner
-        #    states=["sync"],  # only one state
-        #    c=["w", "t"],  # TODO - probably just need one
-        #    bc=["dg", "b"],  # TODO  - probably just need one
-        #    font="courier",  # arial, courier, times
-        #    size=25,
-        #    bold=True,
-        #    italic=False,
-        # )
 
         # now, connect to websockets
         self._config["iganet_ws"] = comm.WebSocketClient(uri)
@@ -413,10 +500,6 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         ):
             # remove existing actors
             self.remove(*self._state["spline_actors"].values(), at=evt.at)
-            self.remove(
-                self._state["spline_cp_actors"][cp_id],
-                at=evt.at,
-            )
 
             # update cp
             # compute physical coordinate of the mouse
@@ -430,7 +513,6 @@ class BSpline2D(vedo.Plotter, FeigenBase):
 
             # add updated splines
             self.add(*self._state["spline_actors"].values(), at=evt.at)
-            self.add(self._state["spline_cp_actors"][cp_id], at=evt.at)
 
         # boundary condition update
         elif (
@@ -443,9 +525,6 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             # first remove
             self.remove(
                 *self._state["boundary_actors"][bid].values(), at=evt.at
-            )
-            self.remove(
-                self._state["boundary_cp_actors"][bid][cp_id], at=evt.at
             )
             self.remove(self._state["boundary_area_actors"][bid], at=evt.at)
 
@@ -467,9 +546,53 @@ class BSpline2D(vedo.Plotter, FeigenBase):
             # process and add
             _process_boundary_actors(self)
 
+            # check connection
+            connec_bid, connec_cp_id = self._state[
+                "boundary_connection"
+            ].transform_ids(bid, cp_id)
+
+            # there's connection - update connected boundary as well
+            if connec_bid is not None:
+                coupled_cp_position = self._state[
+                    "boundary_connection"
+                ].transform_position(
+                    connec_bid,
+                    connec_cp_id,
+                    bid,
+                    cp_id,
+                    self._state["boundary_splines"][bid].cps[cp_id],
+                )
+
+                # update coupled cp
+                self._state["boundary_splines"][connec_bid].cps[
+                    connec_cp_id
+                ] = coupled_cp_position
+
+                # temporarily overwrite picked_id for coupled update
+                self._state["picked_cp_id"] = connec_cp_id
+                self._state["picked_boundary_id"] = connec_bid
+                # update
+                self.remove(
+                    *self._state["boundary_actors"][connec_bid].values(),
+                    at=evt.at,
+                )
+                self.remove(
+                    self._state["boundary_area_actors"][connec_bid], at=evt.at
+                )
+                _process_boundary_actors(self)
+                self.add(
+                    *self._state["boundary_actors"][connec_bid].values(),
+                    at=evt.at,
+                )
+                self.add(
+                    self._state["boundary_area_actors"][connec_bid], at=evt.at
+                )
+                # reset
+                self._state["picked_cp_id"] = cp_id
+                self._state["picked_boundary_id"] = bid
+
             self.add(*self._state["boundary_actors"][bid].values(), at=evt.at)
             self.add(self._state["boundary_area_actors"][bid], at=evt.at)
-            self.add(self._state["boundary_cp_actors"][bid][cp_id], at=evt.at)
 
         # render!
         self.render()
