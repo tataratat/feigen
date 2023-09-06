@@ -10,7 +10,7 @@ authors = [
     {name = 'Matthias Möller', email = 'mmoelle1@gmail.com'},
 ]
 readme = 'README.md'
-requires-python = '>=3.6'
+requires-python = '>=3.7'
 keywords = ['iganet', 'interactive']
 license = {text = 'MPL 2.0'}
 classifiers = [
