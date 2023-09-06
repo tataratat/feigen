@@ -1,1 +1,13 @@
-# feigen - python interactive front end for iganet.
+# feigen - python interactive Front End for IGA ENgines.
+feigen is a python library for interactive spline plotting.
+It focues on supporting isogeometric analysis tools, such as `iganet`, `splinepy`, and `pygismo`.
+
+## Install guide
+you can install feigen using `pip`:
+```
+pip install feigen
+```
+For the latest develop version:
+```
+pip install git+https://github.com/tataratat/feigen.git@main
+```
