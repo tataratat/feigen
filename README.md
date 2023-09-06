@@ -1,1 +1,1 @@
-# iganet-interactive
+# feigen - python interactive front end for iganet.
