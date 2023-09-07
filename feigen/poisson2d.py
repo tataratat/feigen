@@ -1,9 +1,8 @@
 import numpy as np
 import splinepy
 import vedo
-from gustaf.utils.arr import enforce_len
+from scipy.sparse import csr_array, linalg
 
-from feigen import comm
 from feigen._base import FeigenBase
 
 # skip bound checks
@@ -161,7 +160,7 @@ def _process_spline_actors(plt):
         return None
 
     plt._state["spline_cp_actors"][cp_id].SetPosition(
-        plt._state["spline"].cps[cp_id]
+        np.append(plt._state["spline"].cps[cp_id], [0])
     )
 
 
@@ -261,14 +260,39 @@ def _process_parametric_view(plt):
     plt._state["parametric_view_actors"] = actors
 
 
-class BSpline2D(vedo.Plotter, FeigenBase):
+def _bid_to_dof(spl, bid):
+    """ """
+    ortho_dim, extrema = divmod(bid, spl.para_dim)
+
+    all_ = slice(None)
+    indices = [all_] * spl.para_dim
+    indices[ortho_dim] = int(extrema * -1)
+
+    dir_flip = -1.0 if extrema else 1.0
+
+    return spl.multi_index[tuple(indices)], ortho_dim, dir_flip
+
+
+def refine(spl):
+    """
+    A predefined refinement rule, so that you can apply to both field and
+    boundaries.
+    """
+    spl.elevate_degrees(list(range(spl.para_dim)) * 2)
+    n_new_kvs = 10
+    for i, (l_bound, u_bound) in enumerate(zip(*spl.parametric_bounds)):
+        spl.insert_knots(
+            i,
+            np.linspace(l_bound, u_bound, int(n_new_kvs + 2))[1:-1],
+        )
+    return spl
+
+
+class Poisson2D(vedo.Plotter, FeigenBase):
     """
     Self contained interactive plotter base.
     Can move control points on the left plot and the right plot will show
-    the response from iganet.
-
-    Upon initialization, it will create bspline at iganet server and
-    setup interactive plotter.
+    the solution of simple laplace problem
 
     Parameters
     ----------
@@ -280,7 +304,7 @@ class BSpline2D(vedo.Plotter, FeigenBase):
 
     __slots__ = ("_config", "_state")
 
-    def __init__(self, uri, degree=None, ncoeffs=None):  # noqa PLR0915
+    def __init__(self, spline=None):  # noqa PLR0915
         """
         Create spline and setup callbacks
         """
@@ -305,27 +329,8 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         # field dim is temporary for now - (1)
         self._config["field_dim"] = 1
 
-        # prepare degrees
-        if degree is None:
-            degree = 2
-            self._logd(f"`degree` not specified, setting default ({degree})")
-
-        # make sure degree is int
-        degree = int(degree)
-
-        # prepare ncoeffs
-        if ncoeffs is None:
-            ncoeffs = [degree + 2] * self._config["dim"]
-            self._logd(
-                "`ncoeffs` not specified, setting default (degree + 2) "
-                f"(= {ncoeffs})"
-            )
-
-        # make sure ncoeff is list
-        ncoeffs = list(ncoeffs)
-
         # set title name
-        self._config["window_title"] = "IgaNet BSpline 2D"
+        self._config["window_title"] = "Poisson 2D"
 
         # sampling resolutions
         default_sampling_resolution = 50
@@ -343,32 +348,23 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         self.add_callback("Interaction", self._update)
         self.add_callback("LeftButtonPress", self._left_click)
         self.add_callback("LeftButtonRelease", self._left_release)
-        self.add_callback("RightButtonPress", self._iganet_sync)
+        self.add_callback("RightButtonPress", self._right_click)
 
-        # now, connect to websockets
-        self._config["iganet_ws"] = comm.WebSocketClient(uri)
-
-        # create session - returns session id
-        self._config["session_id"] = comm.RequestForm.create_session(
-            self._config["iganet_ws"]
-        )
-
-        # with session id, create request form
-        self._config["form"] = comm.RequestForm(
-            self._config["iganet_ws"], self._config["session_id"]
-        )
-
-        # create spline - returns spline id
-        self._config["spline_id"] = self._config["form"].create_spline(
-            "BSplineSurface", degree=degree, ncoeffs=ncoeffs
-        )
-
-        # create matching local spline
-        self._state["spline"] = splinepy.BSpline(
-            **self._config["form"].model_info(
-                self._config["spline_id"], to_splinepy_dict=True
-            )
-        )
+        # register spline
+        if spline is None:
+            self._state["spline"] = splinepy.helpme.create.surface_circle(
+                1
+            ).nurbs
+            self._state["spline"].insert_knots(0, [0.5])
+            self._state["spline"].insert_knots(1, [0.5])
+        else:
+            support_dim = 2
+            if spline.para_dim != support_dim or spline.dim != support_dim:
+                raise ValueError(
+                    "This plotter is built for splines with "
+                    "para_dim=2 and dim=2"
+                )
+            self._state["spline"] = spline
 
         # create boundary splines - will be used to control BCs
         conform_param_view = self._state["spline"].create.parametric_view(
@@ -597,9 +593,9 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         # render!
         self.render()
 
-    def _iganet_sync(self, evt):  # noqa ARG002
+    def _right_click(self, evt):  # noqa ARG002
         """
-        Syncs iganet on right click.
+        Syncs solution on right click.
 
         Parameters
         ----------
@@ -616,55 +612,100 @@ class BSpline2D(vedo.Plotter, FeigenBase):
                 *server_actors.values(), at=self._config["server_plot"]
             )
 
-        # sync current coordinates
-        self._config["form"].sync_coeffs(
-            self._config["spline_id"], self._state["spline"].cps
+        # we will solve the problem with collocation methods
+        geometry = self._state["spline"]
+        solution = self._state.get("solution_spline", None)
+        if solution is None:
+            dict_spline = geometry.current_core_properties()
+            dict_spline["control_points"] = np.zeros(
+                (len(geometry.cps), 1), dtype="float64"
+            )
+            solution = type(geometry)(**dict_spline)
+            self._state["solution_spline"] = solution
+
+            refine(solution)
+
+            self._logd(
+                f"created solution spline - degrees: {solution.ds}"
+                f"knot_vectors: {solution.kvs}"
+            )
+
+            # get greville points and sparsity pattern
+            queries = solution.greville_abscissae
+            self._state["solution_queries"] = queries
+
+            support = solution.support(queries)
+            n_row, n_col = support.shape
+            row_ids = np.arange(n_row).repeat(n_col)
+            col_ids = support.ravel()
+            self._state["solution_n_row"] = n_row
+            self._state["solution_row_ids"] = row_ids
+            self._state["solution_n_col"] = n_col
+            self._state["solution_col_ids"] = col_ids
+
+        queries = self._state["solution_queries"]
+
+        # get mapper and evaluate basis laplacian
+        mapper = solution.mapper(reference=geometry)
+        b_laplacian, _ = mapper.basis_laplacian_and_support(queries)
+
+        # prepare lhs sparse matrix
+        sp_laplacian = csr_array(
+            (
+                b_laplacian.ravel(),
+                (
+                    self._state["solution_row_ids"],
+                    self._state["solution_col_ids"],
+                ),
+            ),
+            shape=[self._state["solution_n_row"]] * 2,
         )
 
-        # sync boundary condition
-        # here
+        # prepare rhs
+        # we could add source function here
+        mi = solution.multi_index
+        boundary_dofs = np.concatenate((mi[[0, -1], :], mi[1:-1, [0, -1]]))
+        rhs = np.ones(len(queries))
+        rhs[boundary_dofs] = 0.0
+
+        # set zeros and ones on lhs
+        sp_laplacian[boundary_dofs] *= 0
+        sp_laplacian[boundary_dofs, boundary_dofs] = 1
+
+        # apply boundary condition
+        # we will loop and extract boundary values
+        for bid, (bdr_spline, bdr_area) in enumerate(
+            zip(
+                self._state["boundary_splines"],
+                self._state["boundary_spline_areas"],
+            )
+        ):
+            # now, based on bdr_area, we extract values for boundary condition
+            cp_half = int(len(bdr_area.cps) / 2)
+
+            bdr = bdr_spline.copy()
+            bdr.cps[:] = bdr_area.cps[:cp_half] - bdr_area.cps[cp_half:]
+            # self._state["solution_refinement"](bdr)
+            refine(bdr)
+            b_dof, axis, factor = _bid_to_dof(solution, bid)
+            rhs[b_dof] = bdr.cps[:, axis] * factor
+
+        solution.cps[:] = linalg.spsolve(-sp_laplacian, rhs).reshape(-1, 1)
 
         # eval field - currently, th
-        field = self._config["form"].evaluate_model(
-            self._config["spline_id"],
-            "ValueFieldMagnitude",
-            enforce_len(
-                self._config["sample_resolutions"],
-                self._state["spline"].para_dim,
-            ).tolist(),
-        )  # this is ravel
+        field = solution.sample(self._config["sample_resolutions"])
 
         # update vedo object
         # we should copy the geometry (spline),
         # because we don't want two plots to have same color
         geo_actor = self._state["spline_actors"]["spline"].clone()
-        geo_actor.cmap("plasma", field).alpha(0.9)
+        geo_actor.cmap("plasma", field).alpha(0.9).add_scalarbar3d()
         self._state["server_plot_actors"] = {
             "spline": geo_actor,
             "knots": self._state["spline_actors"]["knots"],
         }
-        self.add(
-            *self._state["server_plot_actors"].values(),
-            at=self._config["server_plot"],
-        )
 
-        # eval current geometry
-        geo_eval = self._config["form"].evaluate_model(
-            self._config["spline_id"],
-            "ValueField",
-            enforce_len(
-                int(self._config["sample_resolutions"] / 5),
-                self._state["spline"].para_dim,
-            ).tolist(),
-        )
-        eval_points = vedo.Points(geo_eval, c="white")
-        eval_point_ids = eval_points.labels("id", on="points", font="VTK")
-        self._state["server_plot_actors"]["evaluated_points"] = eval_points
-        self._state["server_plot_actors"][
-            "evaluated_point_ids"
-        ] = eval_point_ids.c("grey")
-
-        # for some reason add won't work here
+        # for some reason add() won't work here
         self.show(
             *self._state["server_plot_actors"].values(),
             at=self._config["server_plot"],
@@ -713,7 +754,7 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         )
 
         self.show(
-            "IgaNet server - right click to sync",
+            "Solution - right click to sync",
             at=self._config["server_plot"],
             interactive=False,
             mode=self._config["plotter_mode"],
@@ -721,8 +762,5 @@ class BSpline2D(vedo.Plotter, FeigenBase):
 
         # let's start
         self.interactive()
-
-        # TODO - close websocket here?
-        self._config["iganet_ws"].websocket.close()
 
         return self

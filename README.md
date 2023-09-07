@@ -13,8 +13,15 @@ pip install git+https://github.com/tataratat/feigen.git@main
 ```
 
 ## Quick start
+### iganet
 Current version supports iganet's BSplineSurface.
 Assuming that you have a server running,
 ```
 python3 -c "import feigen; feigen.BSpline2D('ws://localhost:9001').start()"
+```
+
+### IGA examples
+#### Poisson problem 2D
+```
+python3 -c "import feigen; feigen.Poisson2D().start()"
 ```
