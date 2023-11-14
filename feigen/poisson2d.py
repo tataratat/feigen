@@ -308,12 +308,12 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         """
         Create spline and setup callbacks
         """
-        # dict to hold all the cs
-        # will hold initial curation constants
+        # dict to hold all the configs
+        # will hold initial configuration constants
         # this won't be actively updated if anything changes
         self._c = {}
 
-        # dict to hold all current s variables
+        # dict to hold all current state variables
         # this will be actively used
         self._s = {}
 
