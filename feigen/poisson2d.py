@@ -352,9 +352,7 @@ class Poisson2D(vedo.Plotter, FeigenBase):
 
         # register spline
         if spline is None:
-            self._s["spline"] = splinepy.helpme.create.surface_circle(
-                1
-            ).nurbs
+            self._s["spline"] = splinepy.helpme.create.surface_circle(1).nurbs
             self._s["spline"].insert_knots(0, [0.5])
             self._s["spline"].insert_knots(1, [0.5])
         else:
@@ -395,9 +393,9 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         self._s["boundary_area_actors"] = [None] * len(para_boundaries)
 
         # create parametric_view - this does not consider embedded geometry
-        self._s["parametric_view"] = self._s[
-            "spline"
-        ].create.parametric_view(axes=True, conform=False)
+        self._s["parametric_view"] = self._s["spline"].create.parametric_view(
+            axes=True, conform=False
+        )
 
         # plotter mode for 2d, trackball actor
         self._c["plotter_mode"] = "TrackballActor"
@@ -406,9 +404,7 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         self._s["picked_cp_id"] = -1
         self._s["picked_boundary_id"] = -1
 
-        self._logd(
-            "Finished setup.", "cs:", self._c, "s:", self._s
-        )
+        self._logd("Finished setup.", "cs:", self._c, "s:", self._s)
 
     def _left_click(self, evt):
         """
@@ -438,18 +434,14 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         # well selected
         self._s["picked_cp_id"] = cp_id
         # maybe this is boundary spline
-        self._s["picked_boundary_id"] = getattr(
-            evt.actor, "boundary_id", -1
-        )
+        self._s["picked_boundary_id"] = getattr(evt.actor, "boundary_id", -1)
         # save picked at
         self._s["picked_at"] = evt.at
 
         # once clicked, this means server's previous response is useless
         server_actors = self._s.get("server_plot_actors", None)
         if server_actors is not None:
-            self.at(self._c["server_plot"]).remove(
-                *server_actors.values()
-            )
+            self.at(self._c["server_plot"]).remove(*server_actors.values())
 
     def _left_release(self, evt):  # noqa ARG002
         """
@@ -511,17 +503,12 @@ class Poisson2D(vedo.Plotter, FeigenBase):
             self.add(*self._s["spline_actors"].values(), at=evt.at)
 
         # boundary condition update
-        elif (
-            evt.at == self._c["bc_plot"]
-            and self._s["picked_at"] == evt.at
-        ):
+        elif evt.at == self._c["bc_plot"] and self._s["picked_at"] == evt.at:
             bid = self._s["picked_boundary_id"]
             boundary_spline = self._s["boundary_splines"][bid]
 
             # first remove
-            self.remove(
-                *self._s["boundary_actors"][bid].values(), at=evt.at
-            )
+            self.remove(*self._s["boundary_actors"][bid].values(), at=evt.at)
             self.remove(self._s["boundary_area_actors"][bid], at=evt.at)
 
             # compute physical coordinate of the mouse
@@ -608,9 +595,7 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         # remove
         server_actors = self._s.get("server_plot_actors", None)
         if server_actors is not None:
-            self.remove(
-                *server_actors.values(), at=self._c["server_plot"]
-            )
+            self.remove(*server_actors.values(), at=self._c["server_plot"])
 
         # we will solve the problem with collocation methods
         geometry = self._s["spline"]
@@ -631,7 +616,7 @@ class Poisson2D(vedo.Plotter, FeigenBase):
             )
 
             # get greville points and sparsity pattern
-            queries = solution.greville_abscissae
+            queries = solution.greville_abscissae()
             self._s["solution_queries"] = queries
 
             support = solution.support(queries)
