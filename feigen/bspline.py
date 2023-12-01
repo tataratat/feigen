@@ -294,13 +294,13 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         self._state = {}
 
         # plotter initialization constants
-        self._config["dim"] = int(2)  # 2D
-        self._config["n_subplots"] = int(
-            3
-        )  # geometry, boundary condition, server response
-        self._config["geometry_plot"] = int(0)
-        self._config["bc_plot"] = int(1)
-        self._config["server_plot"] = int(2)
+        self._config["dim"] = 2  # 2D
+        self._config[
+            "n_subplots"
+        ] = 3  # geometry, boundary condition, server response
+        self._config["geometry_plot"] = 0
+        self._config["bc_plot"] = 1
+        self._config["server_plot"] = 2
 
         # field dim is temporary for now - (1)
         self._config["field_dim"] = 1

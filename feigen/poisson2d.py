@@ -318,13 +318,13 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         self._s = {}
 
         # plotter initialization constants
-        self._c["dim"] = int(2)  # 2D
-        self._c["n_subplots"] = int(
-            3
-        )  # geometry, boundary condition, server response
-        self._c["geometry_plot"] = int(0)
-        self._c["bc_plot"] = int(1)
-        self._c["server_plot"] = int(2)
+        self._c["dim"] = 2  # 2D
+        self._c[
+            "n_subplots"
+        ] = 3  # geometry, boundary condition, server response
+        self._c["geometry_plot"] = 0
+        self._c["bc_plot"] = 1
+        self._c["server_plot"] = 2
 
         # field dim is temporary for now - (1)
         self._c["field_dim"] = 1
