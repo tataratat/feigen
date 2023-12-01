@@ -133,41 +133,41 @@ def _process_spline_actors(plt):
     None
     """
     # set show_options
-    spl = plt._state["spline"]
+    spl = plt._s["spline"]
     show_options = spl.show_options
-    show_options["resolutions"] = plt._config["sample_resolutions"]
+    show_options["resolutions"] = plt._c["sample_resolutions"]
     show_options["control_points"] = False
     show_options["control_mesh"] = True
     show_options["lighting"] = "off"
 
     # get spline actors
-    plt._state["spline_actors"] = spl.showable()
+    plt._s["spline_actors"] = spl.showable()
 
     # don't want any of these actors to be pickable
-    for v in plt._state["spline_actors"].values():
+    for v in plt._s["spline_actors"].values():
         v.pickable(False)
 
     # process cps
     # nothing selected -> update all
-    cp_id = plt._state["picked_cp_id"]
+    cp_id = plt._s["picked_cp_id"]
     new_cps = []
     if cp_id < 0:
-        for i, cp in enumerate(plt._state["spline"].cps):
+        for i, cp in enumerate(plt._s["spline"].cps):
             sph = vedo.Sphere(cp, **_CONF["sphere_option"])
             sph.cp_id = i
             new_cps.append(sph)
-        plt._state["spline_cp_actors"] = new_cps
+        plt._s["spline_cp_actors"] = new_cps
         return None
 
-    plt._state["spline_cp_actors"][cp_id].SetPosition(
-        np.append(plt._state["spline"].cps[cp_id], [0])
+    plt._s["spline_cp_actors"][cp_id].SetPosition(
+        np.append(plt._s["spline"].cps[cp_id], [0])
     )
 
 
 def _process_boundary_actors(plt):
     """
     Helper function to process boundary spline.
-    all necessary values should be available from _state
+    all necessary values should be available from _s
 
     Parameters
     ----------
@@ -178,29 +178,29 @@ def _process_boundary_actors(plt):
     None
     """
     # get boundary_spline
-    bid = plt._state["picked_boundary_id"]
+    bid = plt._s["picked_boundary_id"]
 
     bids = []
 
     if bid < 0:
         # nothing set. process all
-        bids = list(range(len(plt._state["boundary_splines"])))
+        bids = list(range(len(plt._s["boundary_splines"])))
         # and also create boundary linkage
-        plt._state["boundary_connection"] = _BoundaryConnection(
-            plt._state["boundary_splines"]
+        plt._s["boundary_connection"] = _BoundaryConnection(
+            plt._s["boundary_splines"]
         )
 
     else:
         bids.append(bid)
 
     # process boundaries. cps as well, if needed
-    boundary_splines = plt._state["boundary_splines"]
-    bc_areas = plt._state["boundary_spline_areas"]
-    cp_id = plt._state["picked_cp_id"]
+    boundary_splines = plt._s["boundary_splines"]
+    bc_areas = plt._s["boundary_spline_areas"]
+    cp_id = plt._s["picked_cp_id"]
     for b in bids:
         b_spl = boundary_splines[b]
         show_o = b_spl.show_options
-        show_o["resolutions"] = plt._config["sample_resolutions"]
+        show_o["resolutions"] = plt._c["sample_resolutions"]
         show_o["control_points"] = False
         show_o["control_mesh"] = True
         show_o["lighting"] = "off"
@@ -214,17 +214,17 @@ def _process_boundary_actors(plt):
         bc_area.cps[:cp_half] = b_spl.cps
         if bc_area.dim == 2:  # noqa PLR2004
             actor = bc_area.extract.faces(
-                plt._config["sample_resolutions"]
+                plt._c["sample_resolutions"]
             ).showable()
         elif bc_area.dim == 3:  # noqa PLR2004
             actor = bc_area.extract.volumes(
-                plt._config["sample_resolutions"]
+                plt._c["sample_resolutions"]
             ).showable()
         actor.c("pink").lighting("off").alpha(0.8).pickable(False)
 
         # now add
-        plt._state["boundary_actors"][b] = actors
-        plt._state["boundary_area_actors"][b] = actor
+        plt._s["boundary_actors"][b] = actors
+        plt._s["boundary_area_actors"][b] = actor
 
         # process cps
         # nothing selected -> update all
@@ -235,18 +235,18 @@ def _process_boundary_actors(plt):
                 sph.cp_id = i
                 sph.boundary_id = b
                 new_cps.append(sph)
-            plt._state["boundary_cp_actors"][b] = new_cps
+            plt._s["boundary_cp_actors"][b] = new_cps
             continue
 
         # now for specific cp
-        plt._state["boundary_cp_actors"][b][cp_id].SetPosition(
+        plt._s["boundary_cp_actors"][b][cp_id].SetPosition(
             np.append(b_spl.cps[cp_id], [0])
         )
 
 
 def _process_parametric_view(plt):
     """ """
-    p_view = plt._state["parametric_view"]
+    p_view = plt._s["parametric_view"]
     show_o = p_view.show_options
     show_o["alpha"] = 0.2
     show_o["c"] = "yellow"
@@ -257,7 +257,7 @@ def _process_parametric_view(plt):
         if isinstance(a, vedo.Assembly):
             for obj in a.recursive_unpack():
                 obj.pickable(False)
-    plt._state["parametric_view_actors"] = actors
+    plt._s["parametric_view_actors"] = actors
 
 
 def _bid_to_dof(spl, bid):
@@ -302,7 +302,7 @@ class Poisson2D(vedo.Plotter, FeigenBase):
       list of int
     """
 
-    __slots__ = ("_config", "_state")
+    __slots__ = ("_c", "_s")
 
     def __init__(self, spline=None):  # noqa PLR0915
         """
@@ -311,37 +311,37 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         # dict to hold all the configs
         # will hold initial configuration constants
         # this won't be actively updated if anything changes
-        self._config = {}
+        self._c = {}
 
         # dict to hold all current state variables
         # this will be actively used
-        self._state = {}
+        self._s = {}
 
         # plotter initialization constants
-        self._config["dim"] = int(2)  # 2D
-        self._config["n_subplots"] = int(
+        self._c["dim"] = int(2)  # 2D
+        self._c["n_subplots"] = int(
             3
         )  # geometry, boundary condition, server response
-        self._config["geometry_plot"] = int(0)
-        self._config["bc_plot"] = int(1)
-        self._config["server_plot"] = int(2)
+        self._c["geometry_plot"] = int(0)
+        self._c["bc_plot"] = int(1)
+        self._c["server_plot"] = int(2)
 
         # field dim is temporary for now - (1)
-        self._config["field_dim"] = 1
+        self._c["field_dim"] = 1
 
         # set title name
-        self._config["window_title"] = "Poisson 2D"
+        self._c["window_title"] = "Poisson 2D"
 
         # sampling resolutions
         default_sampling_resolution = 50
-        self._config["sample_resolutions"] = default_sampling_resolution
+        self._c["sample_resolutions"] = default_sampling_resolution
 
         # now init
         super().__init__(
-            N=self._config["n_subplots"],
+            N=self._c["n_subplots"],
             interactive=False,  # True will pop the window already
             sharecam=False,
-            title=self._config["window_title"],
+            title=self._c["window_title"],
         )
 
         # add callbacks
@@ -352,11 +352,9 @@ class Poisson2D(vedo.Plotter, FeigenBase):
 
         # register spline
         if spline is None:
-            self._state["spline"] = splinepy.helpme.create.surface_circle(
-                1
-            ).nurbs
-            self._state["spline"].insert_knots(0, [0.5])
-            self._state["spline"].insert_knots(1, [0.5])
+            self._s["spline"] = splinepy.helpme.create.surface_circle(1).nurbs
+            self._s["spline"].insert_knots(0, [0.5])
+            self._s["spline"].insert_knots(1, [0.5])
         else:
             support_dim = 2
             if spline.para_dim != support_dim or spline.dim != support_dim:
@@ -364,10 +362,10 @@ class Poisson2D(vedo.Plotter, FeigenBase):
                     "This plotter is built for splines with "
                     "para_dim=2 and dim=2"
                 )
-            self._state["spline"] = spline
+            self._s["spline"] = spline
 
         # create boundary splines - will be used to control BCs
-        conform_param_view = self._state["spline"].create.parametric_view(
+        conform_param_view = self._s["spline"].create.parametric_view(
             axes=False, conform=True
         )
         para_boundaries = conform_param_view.extract.boundaries()
@@ -386,29 +384,27 @@ class Poisson2D(vedo.Plotter, FeigenBase):
             pb_high = para_boundaries[i * para_dim + 1]
             pb_high.cps[:] += offset
 
-        self._state["boundary_splines"] = para_boundaries
-        self._state["boundary_spline_areas"] = [
+        self._s["boundary_splines"] = para_boundaries
+        self._s["boundary_spline_areas"] = [
             pb.create.extruded([0] * pb.dim) for pb in para_boundaries
         ]
-        self._state["boundary_actors"] = [None] * len(para_boundaries)
-        self._state["boundary_cp_actors"] = [None] * len(para_boundaries)
-        self._state["boundary_area_actors"] = [None] * len(para_boundaries)
+        self._s["boundary_actors"] = [None] * len(para_boundaries)
+        self._s["boundary_cp_actors"] = [None] * len(para_boundaries)
+        self._s["boundary_area_actors"] = [None] * len(para_boundaries)
 
         # create parametric_view - this does not consider embedded geometry
-        self._state["parametric_view"] = self._state[
-            "spline"
-        ].create.parametric_view(axes=True, conform=False)
+        self._s["parametric_view"] = self._s["spline"].create.parametric_view(
+            axes=True, conform=False
+        )
 
         # plotter mode for 2d, trackball actor
-        self._config["plotter_mode"] = "TrackballActor"
+        self._c["plotter_mode"] = "TrackballActor"
 
         # initialize value
-        self._state["picked_cp_id"] = -1
-        self._state["picked_boundary_id"] = -1
+        self._s["picked_cp_id"] = -1
+        self._s["picked_boundary_id"] = -1
 
-        self._logd(
-            "Finished setup.", "configs:", self._config, "state:", self._state
-        )
+        self._logd("Finished setup.", "cs:", self._c, "s:", self._s)
 
     def _left_click(self, evt):
         """
@@ -436,20 +432,16 @@ class Poisson2D(vedo.Plotter, FeigenBase):
             return None
 
         # well selected
-        self._state["picked_cp_id"] = cp_id
+        self._s["picked_cp_id"] = cp_id
         # maybe this is boundary spline
-        self._state["picked_boundary_id"] = getattr(
-            evt.actor, "boundary_id", -1
-        )
+        self._s["picked_boundary_id"] = getattr(evt.actor, "boundary_id", -1)
         # save picked at
-        self._state["picked_at"] = evt.at
+        self._s["picked_at"] = evt.at
 
         # once clicked, this means server's previous response is useless
-        server_actors = self._state.get("server_plot_actors", None)
+        server_actors = self._s.get("server_plot_actors", None)
         if server_actors is not None:
-            self.at(self._config["server_plot"]).remove(
-                *server_actors.values()
-            )
+            self.at(self._c["server_plot"]).remove(*server_actors.values())
 
     def _left_release(self, evt):  # noqa ARG002
         """
@@ -464,8 +456,8 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         -------
         None
         """
-        self._state["picked_cp_id"] = -1
-        self._state["picked_boundary_id"] = -1
+        self._s["picked_cp_id"] = -1
+        self._s["picked_boundary_id"] = -1
 
     def _update(self, evt):
         """
@@ -481,55 +473,50 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         None
         """
         # exit if there's no selection
-        cp_id = self._state["picked_cp_id"]
+        cp_id = self._s["picked_cp_id"]
         if cp_id < 0:
             return None
 
         # exit if this plot is server plot
-        if evt.at == self._config["server_plot"]:
+        if evt.at == self._c["server_plot"]:
             return None
 
         # geometry update
         if (
-            evt.at == self._config["geometry_plot"]
-            and self._state["picked_at"] == evt.at
+            evt.at == self._c["geometry_plot"]
+            and self._s["picked_at"] == evt.at
         ):
             # remove existing actors
-            self.remove(*self._state["spline_actors"].values(), at=evt.at)
+            self.remove(*self._s["spline_actors"].values(), at=evt.at)
 
             # update cp
             # compute physical coordinate of the mouse
             coord = self.compute_world_coordinate(evt.picked2d, at=evt.at)[
-                : self._state["spline"].dim
+                : self._s["spline"].dim
             ]
-            self._state["spline"].cps[cp_id] = coord
+            self._s["spline"].cps[cp_id] = coord
 
             # prepare actors
             _process_spline_actors(self)
 
             # add updated splines
-            self.add(*self._state["spline_actors"].values(), at=evt.at)
+            self.add(*self._s["spline_actors"].values(), at=evt.at)
 
         # boundary condition update
-        elif (
-            evt.at == self._config["bc_plot"]
-            and self._state["picked_at"] == evt.at
-        ):
-            bid = self._state["picked_boundary_id"]
-            boundary_spline = self._state["boundary_splines"][bid]
+        elif evt.at == self._c["bc_plot"] and self._s["picked_at"] == evt.at:
+            bid = self._s["picked_boundary_id"]
+            boundary_spline = self._s["boundary_splines"][bid]
 
             # first remove
-            self.remove(
-                *self._state["boundary_actors"][bid].values(), at=evt.at
-            )
-            self.remove(self._state["boundary_area_actors"][bid], at=evt.at)
+            self.remove(*self._s["boundary_actors"][bid].values(), at=evt.at)
+            self.remove(self._s["boundary_area_actors"][bid], at=evt.at)
 
             # compute physical coordinate of the mouse
             # depends on the field dim, we will have to restrict
             # movement
-            if self._config["field_dim"] == 1:  # noqa PLR2004
-                ind = int(bid / self._state["spline"].para_dim)
-            elif self._config["field_dim"] == 2:  # noqa PLR2004
+            if self._c["field_dim"] == 1:  # noqa PLR2004
+                ind = int(bid / self._s["spline"].para_dim)
+            elif self._c["field_dim"] == 2:  # noqa PLR2004
                 ind = slice(None, None, None)
             else:
                 raise ValueError("This interactor supports field_dim < 3.")
@@ -537,58 +524,58 @@ class Poisson2D(vedo.Plotter, FeigenBase):
             coord = self.compute_world_coordinate(evt.picked2d, at=evt.at)[
                 : boundary_spline.dim
             ][ind]
-            self._state["boundary_splines"][bid].cps[cp_id, ind] = coord
+            self._s["boundary_splines"][bid].cps[cp_id, ind] = coord
 
             # process and add
             _process_boundary_actors(self)
 
             # check connection
-            connec_bid, connec_cp_id = self._state[
+            connec_bid, connec_cp_id = self._s[
                 "boundary_connection"
             ].transform_ids(bid, cp_id)
 
             # there's connection - update connected boundary as well
             if connec_bid is not None:
-                coupled_cp_position = self._state[
+                coupled_cp_position = self._s[
                     "boundary_connection"
                 ].transform_position(
                     connec_bid,
                     connec_cp_id,
                     bid,
                     cp_id,
-                    self._state["boundary_splines"][bid].cps[cp_id],
+                    self._s["boundary_splines"][bid].cps[cp_id],
                 )
 
                 # update coupled cp
-                self._state["boundary_splines"][connec_bid].cps[
+                self._s["boundary_splines"][connec_bid].cps[
                     connec_cp_id
                 ] = coupled_cp_position
 
                 # temporarily overwrite picked_id for coupled update
-                self._state["picked_cp_id"] = connec_cp_id
-                self._state["picked_boundary_id"] = connec_bid
+                self._s["picked_cp_id"] = connec_cp_id
+                self._s["picked_boundary_id"] = connec_bid
                 # update
                 self.remove(
-                    *self._state["boundary_actors"][connec_bid].values(),
+                    *self._s["boundary_actors"][connec_bid].values(),
                     at=evt.at,
                 )
                 self.remove(
-                    self._state["boundary_area_actors"][connec_bid], at=evt.at
+                    self._s["boundary_area_actors"][connec_bid], at=evt.at
                 )
                 _process_boundary_actors(self)
                 self.add(
-                    *self._state["boundary_actors"][connec_bid].values(),
+                    *self._s["boundary_actors"][connec_bid].values(),
                     at=evt.at,
                 )
                 self.add(
-                    self._state["boundary_area_actors"][connec_bid], at=evt.at
+                    self._s["boundary_area_actors"][connec_bid], at=evt.at
                 )
                 # reset
-                self._state["picked_cp_id"] = cp_id
-                self._state["picked_boundary_id"] = bid
+                self._s["picked_cp_id"] = cp_id
+                self._s["picked_boundary_id"] = bid
 
-            self.add(*self._state["boundary_actors"][bid].values(), at=evt.at)
-            self.add(self._state["boundary_area_actors"][bid], at=evt.at)
+            self.add(*self._s["boundary_actors"][bid].values(), at=evt.at)
+            self.add(self._s["boundary_area_actors"][bid], at=evt.at)
 
         # render!
         self.render()
@@ -606,22 +593,20 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         None
         """
         # remove
-        server_actors = self._state.get("server_plot_actors", None)
+        server_actors = self._s.get("server_plot_actors", None)
         if server_actors is not None:
-            self.remove(
-                *server_actors.values(), at=self._config["server_plot"]
-            )
+            self.remove(*server_actors.values(), at=self._c["server_plot"])
 
         # we will solve the problem with collocation methods
-        geometry = self._state["spline"]
-        solution = self._state.get("solution_spline", None)
+        geometry = self._s["spline"]
+        solution = self._s.get("solution_spline", None)
         if solution is None:
             dict_spline = geometry.current_core_properties()
             dict_spline["control_points"] = np.zeros(
                 (len(geometry.cps), 1), dtype="float64"
             )
             solution = type(geometry)(**dict_spline)
-            self._state["solution_spline"] = solution
+            self._s["solution_spline"] = solution
 
             refine(solution)
 
@@ -631,19 +616,19 @@ class Poisson2D(vedo.Plotter, FeigenBase):
             )
 
             # get greville points and sparsity pattern
-            queries = solution.greville_abscissae
-            self._state["solution_queries"] = queries
+            queries = solution.greville_abscissae()
+            self._s["solution_queries"] = queries
 
             support = solution.support(queries)
             n_row, n_col = support.shape
             row_ids = np.arange(n_row).repeat(n_col)
             col_ids = support.ravel()
-            self._state["solution_n_row"] = n_row
-            self._state["solution_row_ids"] = row_ids
-            self._state["solution_n_col"] = n_col
-            self._state["solution_col_ids"] = col_ids
+            self._s["solution_n_row"] = n_row
+            self._s["solution_row_ids"] = row_ids
+            self._s["solution_n_col"] = n_col
+            self._s["solution_col_ids"] = col_ids
 
-        queries = self._state["solution_queries"]
+        queries = self._s["solution_queries"]
 
         # get mapper and evaluate basis laplacian
         mapper = solution.mapper(reference=geometry)
@@ -654,11 +639,11 @@ class Poisson2D(vedo.Plotter, FeigenBase):
             (
                 b_laplacian.ravel(),
                 (
-                    self._state["solution_row_ids"],
-                    self._state["solution_col_ids"],
+                    self._s["solution_row_ids"],
+                    self._s["solution_col_ids"],
                 ),
             ),
-            shape=[self._state["solution_n_row"]] * 2,
+            shape=[self._s["solution_n_row"]] * 2,
         )
 
         # prepare rhs
@@ -676,8 +661,8 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         # we will loop and extract boundary values
         for bid, (bdr_spline, bdr_area) in enumerate(
             zip(
-                self._state["boundary_splines"],
-                self._state["boundary_spline_areas"],
+                self._s["boundary_splines"],
+                self._s["boundary_spline_areas"],
             )
         ):
             # now, based on bdr_area, we extract values for boundary condition
@@ -685,7 +670,7 @@ class Poisson2D(vedo.Plotter, FeigenBase):
 
             bdr = bdr_spline.copy()
             bdr.cps[:] = bdr_area.cps[:cp_half] - bdr_area.cps[cp_half:]
-            # self._state["solution_refinement"](bdr)
+            # self._s["solution_refinement"](bdr)
             refine(bdr)
             b_dof, axis, factor = _bid_to_dof(solution, bid)
             rhs[b_dof] = bdr.cps[:, axis] * factor
@@ -693,22 +678,22 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         solution.cps[:] = linalg.spsolve(-sp_laplacian, rhs).reshape(-1, 1)
 
         # eval field - currently, th
-        field = solution.sample(self._config["sample_resolutions"])
+        field = solution.sample(self._c["sample_resolutions"])
 
         # update vedo object
         # we should copy the geometry (spline),
         # because we don't want two plots to have same color
-        geo_actor = self._state["spline_actors"]["spline"].clone()
+        geo_actor = self._s["spline_actors"]["spline"].clone()
         geo_actor.cmap("plasma", field).alpha(0.9).add_scalarbar3d()
-        self._state["server_plot_actors"] = {
+        self._s["server_plot_actors"] = {
             "spline": geo_actor,
-            "knots": self._state["spline_actors"]["knots"],
+            "knots": self._s["spline_actors"]["knots"],
         }
 
         # for some reason add() won't work here
         self.show(
-            *self._state["server_plot_actors"].values(),
-            at=self._config["server_plot"],
+            *self._s["server_plot_actors"].values(),
+            at=self._c["server_plot"],
         )
 
     def start(self):
@@ -728,36 +713,36 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         # show everything
         self.show(
             "Geometry",
-            *self._state["spline_actors"].values(),
-            *self._state["spline_cp_actors"],
-            at=self._config["geometry_plot"],
+            *self._s["spline_actors"].values(),
+            *self._s["spline_cp_actors"],
+            at=self._c["geometry_plot"],
             interactive=False,
-            mode=self._config["plotter_mode"],
+            mode=self._c["plotter_mode"],
         )
         for b, b_cp in zip(
-            self._state["boundary_actors"], self._state["boundary_cp_actors"]
+            self._s["boundary_actors"], self._s["boundary_cp_actors"]
         ):
             self.show(
                 *b.values(),
                 *b_cp,
-                at=self._config["bc_plot"],
+                at=self._c["bc_plot"],
                 interactive=False,
-                mode=self._config["plotter_mode"],
+                mode=self._c["plotter_mode"],
             )
 
         self.show(
             "Boundary condition in parametric view",
-            *self._state["parametric_view_actors"].values(),
-            at=self._config["bc_plot"],
+            *self._s["parametric_view_actors"].values(),
+            at=self._c["bc_plot"],
             interactive=False,
-            mode=self._config["plotter_mode"],
+            mode=self._c["plotter_mode"],
         )
 
         self.show(
             "Solution - right click to sync",
-            at=self._config["server_plot"],
+            at=self._c["server_plot"],
             interactive=False,
-            mode=self._config["plotter_mode"],
+            mode=self._c["plotter_mode"],
         )
 
         # let's start
