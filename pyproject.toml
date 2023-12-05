@@ -30,7 +30,7 @@ classifiers = [
 dependencies = [
     'vedo',
     'numpy',
-    'splinepy[all]>=0.0.45',
+    'splinepy[all]>=0.0.47',
     'websockets',
 ]
 dynamic = ['version']
