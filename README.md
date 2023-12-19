@@ -25,3 +25,8 @@ python3 -c "import feigen; feigen.BSpline2D('ws://localhost:9001').start()"
 ```
 python3 -c "import feigen; feigen.Poisson2D().start()"
 ```
+
+#### Poisson problem 2D - Configurable and with option to view collocations points
+```
+python3 -c "import feigen; feigen.CustomPoisson2D().start()"
+```
