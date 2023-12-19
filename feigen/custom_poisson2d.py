@@ -108,7 +108,7 @@ class CustomPoisson2D(Poisson2D):
                     "para_dim=2 and dim=2"
                 )
             if not isinstance(spline, splinepy.bspline.BSplineBase):
-                raise TypeError(f"This app only supports BSpline family")
+                raise TypeError("This app only supports BSpline family")
             self._s["spline"] = spline
 
         # collocation point generation function
@@ -377,7 +377,7 @@ class CustomPoisson2D(Poisson2D):
         )
 
         self.show(
-            "Solution - right click to sync",
+            "Solution - right click to sync\n& view collocation points",
             at=self._c["server_plot"],
             interactive=False,
             mode=self._c["plotter_mode"],
