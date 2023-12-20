@@ -30,3 +30,9 @@ python3 -c "import feigen; feigen.Poisson2D().start()"
 ```
 python3 -c "import feigen; feigen.CustomPoisson2D().start()"
 ```
+
+### Spline Examples
+#### Jacobian Determinant 2D
+```
+python3 -c "import feigen; feigen.JacobianDeterminant().start()"
+```
