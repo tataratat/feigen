@@ -188,7 +188,7 @@ class CustomPoisson2D(Poisson2D):
         # clear error plot too
         error_actors = self._s.get("error_plot_actors", None)
         if error_actors is not None:
-            self.at(self._c["error_plot"]).remove(*error_actors.values())
+            self.remove(*error_actors.values(), at=self._c["error_plot"])
 
     def _right_click(self, evt):  # noqa ARG002
         """
@@ -238,7 +238,7 @@ class CustomPoisson2D(Poisson2D):
         # we can pack this into the `if` above also
         error_actors = self._s.get("error_plot_actors", None)
         if error_actors is not None:
-            self.remove(*error_actors.values())
+            self.remove(*error_actors.values(), at=self._c["error_plot"])
 
         # we will solve the problem with collocation methods
         geometry = self._s["spline"]
@@ -344,19 +344,23 @@ class CustomPoisson2D(Poisson2D):
 
         # plot error
         err_actor = self._s["spline_actors"]["spline"].clone()
-        err = mapper.laplacian(
-            splinepy.utils.data.uniform_query(
-                solution.parametric_bounds,
-                splinepy.utils.data._enforce_len(
-                    self._c["sample_resolutions"], self._s["spline"].para_dim
-                ),
-            )
+        u_q = splinepy.utils.data.uniform_query(
+            solution.parametric_bounds,
+            splinepy.utils.data._enforce_len(
+                self._c["sample_resolutions"], self._s["spline"].para_dim
+            ),
         )
+        err = mapper.laplacian(u_q)
         err = abs(err + 1)
-        err_actor.cmap("viridis", err).add_scalarbar3d()
+
+        worst_id = np.argmax(err)
+        w_point = vedo.Point(self._s["spline"].evaluate([u_q[worst_id]])[0])
+
+        err_actor.cmap("coolwarm", err).add_scalarbar3d()
         self._s["error_plot_actors"] = {
             "spline": err_actor,
             "knots": self._s["spline_actors"]["knots"],
+            "worst": w_point,
         }
         self.show(
             *self._s["error_plot_actors"].values(),
@@ -420,7 +424,7 @@ class CustomPoisson2D(Poisson2D):
         )
 
         self.show(
-            "Error",
+            "Error - red dot marks the maximum",
             at=self._c["error_plot"],
             interactive=False,
             mode=self._c["plotter_mode"],
