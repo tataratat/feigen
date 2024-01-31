@@ -351,7 +351,7 @@ class CustomPoisson2D(Poisson2D):
             ),
         )
         err = mapper.laplacian(u_q)
-        err = abs(err + 1)
+        err = np.log10(abs(err + 1))
 
         worst_id = np.argmax(err)
         w_point = vedo.Point(self._s["spline"].evaluate([u_q[worst_id]])[0])
