@@ -36,3 +36,8 @@ python3 -c "import feigen; feigen.CustomPoisson2D().start()"
 ```
 python3 -c "import feigen; feigen.JacobianDeterminant().start()"
 ```
+
+### NURBS Weights 2D
+```
+python3 -c "import feigen; feigen.NURBSWeights().start()"
+```
