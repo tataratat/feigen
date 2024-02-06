@@ -92,7 +92,9 @@ class NURBSWeights(vedo.Plotter, FeigenBase):
 
     __slots__ = ("_c", "_s")
 
-    def __init__(self, spline=None, w_min=_W_MIN, w_max=_W_MAX):  # noqa PLR0915
+    def __init__(
+        self, spline=None, w_min=_W_MIN, w_max=_W_MAX
+    ):  # noqa PLR0915
         """
         Create spline and setup callbacks
         """
