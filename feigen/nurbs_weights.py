@@ -92,7 +92,9 @@ class NURBSWeights(vedo.Plotter, FeigenBase):
 
     __slots__ = ("_c", "_s")
 
-    def __init__(self, spline=None):  # noqa PLR0915
+    def __init__(
+        self, spline=None, w_min=_W_MIN, w_max=_W_MAX
+    ):  # noqa PLR0915
         """
         Create spline and setup callbacks
         """
@@ -118,6 +120,10 @@ class NURBSWeights(vedo.Plotter, FeigenBase):
 
         # set title name
         self._c["window_title"] = "NURBS Weights"
+
+        # set weights extrema
+        self._c["w_min"] = w_min
+        self._c["w_max"] = w_max
 
         # sampling resolutions
         default_sampling_resolution = 50
@@ -343,7 +349,7 @@ class NURBSWeights(vedo.Plotter, FeigenBase):
         )
 
         self.show(
-            "Solution - right click to sync",
+            "Jacobian Determinant - right click to sync",
             at=self._c["server_plot"],
             interactive=False,
             mode=self._c["plotter_mode"],
@@ -360,8 +366,8 @@ class NURBSWeights(vedo.Plotter, FeigenBase):
             self._weight_slider,
             pos1=[*pos1, 0],
             pos2=[*pos2, 0],
-            xmin=_W_MIN,
-            xmax=_W_MAX,
+            xmin=self._c["w_min"],
+            xmax=self._c["w_max"],
             value=1,
             s=0.04,
             title="weight",
