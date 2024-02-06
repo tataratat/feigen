@@ -349,7 +349,7 @@ class NURBSWeights(vedo.Plotter, FeigenBase):
         )
 
         self.show(
-            "Solution - right click to sync",
+            "Jacobian Determinant - right click to sync",
             at=self._c["server_plot"],
             interactive=False,
             mode=self._c["plotter_mode"],
