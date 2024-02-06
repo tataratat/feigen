@@ -159,9 +159,9 @@ def _process_spline_actors(plt):
         plt._s["spline_cp_actors"] = new_cps
         return None
 
-    plt._s["spline_cp_actors"][cp_id].SetPosition(
-        np.append(plt._s["spline"].cps[cp_id], [0])
-    )
+    sphere_mesh = plt._s["spline_cp_actors"][cp_id]
+    sphere_mesh.pos(*plt._s["spline"].cps[cp_id])
+    sphere_mesh.apply_transform_from_actor()
 
 
 def _process_boundary_actors(plt):
@@ -238,10 +238,9 @@ def _process_boundary_actors(plt):
             plt._s["boundary_cp_actors"][b] = new_cps
             continue
 
-        # now for specific cp
-        plt._s["boundary_cp_actors"][b][cp_id].SetPosition(
-            np.append(b_spl.cps[cp_id], [0])
-        )
+        sphere_mesh = plt._s["boundary_cp_actors"][b][cp_id]
+        sphere_mesh.pos(*b_spl.cps[cp_id])
+        sphere_mesh.apply_transform_from_actor()
 
 
 def _process_parametric_view(plt):
@@ -694,6 +693,7 @@ class Poisson2D(vedo.Plotter, FeigenBase):
         self.show(
             *self._s["server_plot_actors"].values(),
             at=self._c["server_plot"],
+            mode=self._c["plotter_mode"],
         )
 
     def start(self):

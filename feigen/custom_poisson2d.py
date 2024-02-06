@@ -62,10 +62,11 @@ class CustomPoisson2D(Poisson2D):
         # plotter initialization constants
         self._c["dim"] = 2  # 2D
         # geometry, boundary condition, server response
-        self._c["n_subplots"] = 3
+        self._c["n_subplots"] = 4
         self._c["geometry_plot"] = 0
         self._c["bc_plot"] = 1
         self._c["server_plot"] = 2
+        self._c["error_plot"] = 3
 
         # field dim is temporary for now - (1)
         self._c["field_dim"] = 1
@@ -184,6 +185,11 @@ class CustomPoisson2D(Poisson2D):
         self._s["right_click_counter"] = 0
         super()._left_click(evt)
 
+        # clear error plot too
+        error_actors = self._s.get("error_plot_actors", None)
+        if error_actors is not None:
+            self.remove(*error_actors.values(), at=self._c["error_plot"])
+
     def _right_click(self, evt):  # noqa ARG002
         """
         Syncs solution on right click.
@@ -212,6 +218,7 @@ class CustomPoisson2D(Poisson2D):
             self.show(
                 collo_actors,
                 at=self._c["server_plot"],
+                mode=self._c["plotter_mode"],
             )
             # counter++
             # this should be from 1 to 2
@@ -219,13 +226,19 @@ class CustomPoisson2D(Poisson2D):
             return None
 
         # remove if right click counter is not 1
-        # this also ensures that continuous right click
+        # this also ensures that continuous right click works
         # although, it will recompute each time
         server_actors = self._s.get("server_plot_actors", None)
         if server_actors is not None:
             self.remove(*server_actors.values(), at=self._c["server_plot"])
             # reset counter
             self._s["right_click_counter"] = 0
+
+        # if there's server actors, there will be error actors
+        # we can pack this into the `if` above also
+        error_actors = self._s.get("error_plot_actors", None)
+        if error_actors is not None:
+            self.remove(*error_actors.values(), at=self._c["error_plot"])
 
         # we will solve the problem with collocation methods
         geometry = self._s["spline"]
@@ -326,6 +339,33 @@ class CustomPoisson2D(Poisson2D):
         self.show(
             *self._s["server_plot_actors"].values(),
             at=self._c["server_plot"],
+            mode=self._c["plotter_mode"],
+        )
+
+        # plot error
+        err_actor = self._s["spline_actors"]["spline"].clone()
+        u_q = splinepy.utils.data.uniform_query(
+            solution.parametric_bounds,
+            splinepy.utils.data._enforce_len(
+                self._c["sample_resolutions"], self._s["spline"].para_dim
+            ),
+        )
+        err = mapper.laplacian(u_q)
+        err = np.log10(abs(err + 1))
+
+        worst_id = np.argmax(err)
+        w_point = vedo.Point(self._s["spline"].evaluate([u_q[worst_id]])[0])
+
+        err_actor.cmap("coolwarm", err).add_scalarbar3d()
+        self._s["error_plot_actors"] = {
+            "spline": err_actor,
+            "knots": self._s["spline_actors"]["knots"],
+            "worst": w_point,
+        }
+        self.show(
+            *self._s["error_plot_actors"].values(),
+            at=self._c["error_plot"],
+            mode=self._c["plotter_mode"],
         )
 
         # counter += 1
@@ -379,6 +419,13 @@ class CustomPoisson2D(Poisson2D):
         self.show(
             "Solution - right click to sync\n& view collocation points",
             at=self._c["server_plot"],
+            interactive=False,
+            mode=self._c["plotter_mode"],
+        )
+
+        self.show(
+            "Error - red dot marks the maximum",
+            at=self._c["error_plot"],
             interactive=False,
             mode=self._c["plotter_mode"],
         )
