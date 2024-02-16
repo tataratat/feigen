@@ -28,7 +28,7 @@ classifiers = [
     'Programming Language :: Python :: 3.12',
 ]
 dependencies = [
-    'vedo @ git+https://github.com/marcomusy/vedo.git@cb44ad7',
+    'vedo>=2024.5.1',
     'numpy',
     'gustaf>=0.0.23',
     'splinepy[all]>=0.0.51',
