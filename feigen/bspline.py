@@ -279,6 +279,14 @@ class BSpline2D(vedo.Plotter, FeigenBase):
 
     __slots__ = ("_config", "_state")
 
+    @property
+    def _c(self):
+        return self._config
+
+    @property
+    def _s(self):
+        return self._state
+
     def __init__(self, uri, degree=None, ncoeffs=None):  # noqa PLR0915
         """
         Create spline and setup callbacks
@@ -656,7 +664,7 @@ class BSpline2D(vedo.Plotter, FeigenBase):
                 self._state["spline"].para_dim,
             ).tolist(),
         )
-        eval_points = vedo.Points(geo_eval, c="white")
+        eval_points = vedo.Points(np.vstack(geo_eval).T, c="white")
         eval_point_ids = eval_points.labels("id", on="points", font="VTK")
         self._state["server_plot_actors"]["evaluated_points"] = eval_points
         self._state["server_plot_actors"][
