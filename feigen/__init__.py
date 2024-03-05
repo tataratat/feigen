@@ -1,5 +1,6 @@
 from feigen import (
     bspline,
+    bspline_texture,
     comm,
     custom_poisson2d,
     jacobian_determinant,
@@ -9,6 +10,7 @@ from feigen import (
 )
 from feigen._version import __version__
 from feigen.bspline import BSpline2D
+from feigen.bspline_texture import BSplineTexture
 from feigen.custom_poisson2d import CustomPoisson2D
 from feigen.jacobian_determinant import JacobianDeterminant
 from feigen.nurbs_weights import NURBSWeights
@@ -23,9 +25,11 @@ __all__ = [
     "custom_poisson2d",
     "jacobian_determinant",
     "nurbs_weights",
+    "bspline_texture",
     "BSpline2D",
     "Poisson2D",
     "CustomPoisson2D",
     "JacobianDeterminant",
     "NURBSWeights",
+    "BSplineTexture",
 ]
