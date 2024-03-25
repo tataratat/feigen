@@ -1,6 +1,7 @@
 """
 Base type of feigen
 """
+
 from feigen import log
 
 

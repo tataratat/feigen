@@ -92,9 +92,9 @@ class JacobianDeterminant(vedo.Plotter, FeigenBase):
 
         # plotter initialization constants
         self._c["dim"] = 2  # 2D
-        self._c[
-            "n_subplots"
-        ] = 2  # geometry, boundary condition, server response
+        self._c["n_subplots"] = (
+            2  # geometry, boundary condition, server response
+        )
         self._c["geometry_plot"] = 0
         self._c["server_plot"] = 1
 
