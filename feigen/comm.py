@@ -1,6 +1,7 @@
 """
 Communication helpers.
 """
+
 import uuid
 
 from websockets.exceptions import ConnectionClosed

@@ -302,9 +302,9 @@ class BSpline2D(vedo.Plotter, FeigenBase):
 
         # plotter initialization constants
         self._config["dim"] = 2  # 2D
-        self._config[
-            "n_subplots"
-        ] = 3  # geometry, boundary condition, server response
+        self._config["n_subplots"] = (
+            3  # geometry, boundary condition, server response
+        )
         self._config["geometry_plot"] = 0
         self._config["bc_plot"] = 1
         self._config["server_plot"] = 2
@@ -667,9 +667,9 @@ class BSpline2D(vedo.Plotter, FeigenBase):
         eval_points = vedo.Points(np.vstack(geo_eval).T, c="white")
         eval_point_ids = eval_points.labels("id", on="points", font="VTK")
         self._state["server_plot_actors"]["evaluated_points"] = eval_points
-        self._state["server_plot_actors"][
-            "evaluated_point_ids"
-        ] = eval_point_ids.c("grey")
+        self._state["server_plot_actors"]["evaluated_point_ids"] = (
+            eval_point_ids.c("grey")
+        )
 
         # for some reason add won't work here
         self.show(
